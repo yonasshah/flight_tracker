@@ -11,9 +11,9 @@ Two trip modes are supported (set via the "mode" field in trips.json):
                Uses SerpApi's google_flights engine.
                Example: "Guatemala City, Jan 9 to Jan 18, $400 or less"
 
-  "flexible" - a whole month, any dates within it.
+  "flexible" - whatever dates are cheapest right now, no month targeting.
                Uses SerpApi's google_travel_explore engine.
-               Example: "Guatemala City sometime in January, $400 or less"
+               Example: "Guatemala City, whenever it's cheap, $400 or less"
 
 Environment variables required:
   SERPAPI_KEY   - your SerpApi API key
@@ -42,14 +42,19 @@ def load_trips(path):
 def call_serpapi(params):
     params = {**params, "api_key": SERPAPI_KEY}
     url = SERPAPI_BASE_URL + "?" + urllib.parse.urlencode(params)
-    with urllib.request.urlopen(url, timeout=30) as response:
-        return json.loads(response.read().decode())
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        print(f"  HTTP {e.code} from SerpApi. Response body: {body}")
+        return {"error": f"HTTP {e.code}: {body}"}
 
 
 def get_price_specific(trip):
     """
     Exact date pair. Uses the google_flights engine.
-    Returns the cheapest round-trip price found, or None.
+    Returns (price, start_date, end_date), or (None, None, None).
     """
     data = call_serpapi({
         "engine": "google_flights",
@@ -63,7 +68,7 @@ def get_price_specific(trip):
 
     if "error" in data:
         print(f"  SerpApi error: {data['error']}")
-        return None
+        return None, None, None
 
     candidates = []
     for key in ("best_flights", "other_flights"):
@@ -74,9 +79,11 @@ def get_price_specific(trip):
 
     if not candidates:
         print("  No prices found.")
-        return None
+        return None, None, None
 
-    return min(candidates)
+    # Specific mode already has known dates from trips.json, but we
+    # return them here too so get_price() has one consistent shape.
+    return min(candidates), trip["departure_date"], trip["return_date"]
 
 
 def get_price_flexible(trip):
@@ -85,15 +92,18 @@ def get_price_flexible(trip):
     engine with both departure_id and arrival_id set.
 
     Important: when arrival_id is a specific airport, SerpApi returns a
-    "flights" array (same shape as the google_flights engine) for the
-    *current best upcoming week-long window* - it does NOT support a
-    "month" parameter combined with a specific arrival_id (that combo
-    returns an error, since month-based scanning only applies to the
-    open-ended "destinations" discovery mode with no arrival_id set).
+    "flights" array (same shape as the google_flights engine) along with
+    top-level "start_date" / "end_date" fields for whatever window it found
+    to be cheapest right now - it does NOT support a "month" parameter
+    combined with a specific arrival_id (that combo returns an error,
+    since month-based scanning only applies to the open-ended
+    "destinations" discovery mode with no arrival_id set).
 
-    So for a specific destination, this gives you "what's the cheapest
-    trip there right now" rather than a literal scan of one named month.
-    Returns the cheapest price found, or None.
+    The length of that window isn't fixed - it could be a few days, a
+    week, ten days, etc. - so we read the actual start_date/end_date
+    SerpApi gives us instead of assuming any particular trip length.
+
+    Returns (price, start_date, end_date), or (None, None, None).
     """
     data = call_serpapi({
         "engine": "google_travel_explore",
@@ -104,7 +114,7 @@ def get_price_flexible(trip):
 
     if "error" in data:
         print(f"  SerpApi error: {data['error']}")
-        return None
+        return None, None, None
 
     candidates = []
     for flight in data.get("flights", []):
@@ -114,12 +124,18 @@ def get_price_flexible(trip):
 
     if not candidates:
         print("  No prices found.")
-        return None
+        return None, None, None
 
-    return min(candidates)
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    return min(candidates), start_date, end_date
 
 
 def get_price(trip):
+    """
+    Returns (price, start_date, end_date). Any of these may be None
+    if nothing could be found or the mode is unrecognized.
+    """
     mode = trip.get("mode", "specific")
     if mode == "specific":
         return get_price_specific(trip)
@@ -127,7 +143,7 @@ def get_price(trip):
         return get_price_flexible(trip)
     else:
         print(f"  Unknown mode '{mode}', skipping.")
-        return None
+        return None, None, None
 
 
 def send_ntfy_alert(topic, title, message):
@@ -145,10 +161,12 @@ def send_ntfy_alert(topic, title, message):
     urllib.request.urlopen(req, timeout=15)
 
 
-def describe_dates(trip):
-    if trip.get("mode") == "flexible":
-        return "cheapest upcoming week-long window (flexible dates)"
-    return f"depart {trip['departure_date']}, return {trip['return_date']}"
+def describe_dates(start_date, end_date):
+    if start_date and end_date:
+        return f"depart {start_date}, return {end_date}"
+    if start_date:
+        return f"around {start_date}"
+    return "dates unknown"
 
 
 def main():
@@ -161,13 +179,14 @@ def main():
 
     for trip in trips:
         print(f"\n{trip['label']} ({trip['origin']} -> {trip['destination']})")
-        price = get_price(trip)
+        price, start_date, end_date = get_price(trip)
 
         if price is None:
             continue
 
         print(f"  Current cheapest price: ${price}")
         print(f"  Target: ${trip['target_price_usd']}")
+        print(f"  Dates found: {describe_dates(start_date, end_date)}")
 
         if price <= trip["target_price_usd"]:
             print("  -> Price hit! Sending notification.")
@@ -177,7 +196,7 @@ def main():
                 message=(
                     f"{trip['label']}\n"
                     f"${price} round-trip (target was ${trip['target_price_usd']})\n"
-                    f"{describe_dates(trip)}"
+                    f"{describe_dates(start_date, end_date)}"
                 ),
             )
         else:
