@@ -15,11 +15,6 @@ Two trip modes are supported (set via the "mode" field in trips.json):
                Uses SerpApi's google_travel_explore engine.
                Example: "Guatemala City sometime in January, $400 or less"
 
-Environment variables required:
-  SERPAPI_KEY   - your SerpApi API key
-
-Run manually:
-  SERPAPI_KEY=xxxx python check_prices.py
 """
 
 import json
