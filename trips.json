@@ -10,5 +10,17 @@
     "return_date": "2027-01-24",
     "target_price_usd": 400,
     "stops": "one_stop_max"
+  },
+  {
+    "label": "Denver - Dustin's Flight",
+    "owner": "yonas",
+    "mode": "specific",
+    "ntfy_topic": "yonas-flightsx1064",
+    "origin": "PHL",
+    "destination": "DEN",
+    "departure_date": "2026-07-09",
+    "return_date": "2026-07-14",
+    "target_price_usd": 300,
+    "stops": "nonstop"
   }
 ]
