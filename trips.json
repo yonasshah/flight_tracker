@@ -18,5 +18,25 @@
     "origin": "PHL",
     "destination": "GUA",
     "target_price_usd": 400
+  },
+      {
+    "label": "TEST - Denver specific dates (should always alert)",
+    "owner": "yonas",
+    "mode": "specific",
+    "ntfy_topic": "yonas-flightsx1064",
+    "origin": "PHL",
+    "destination": "DEN",
+    "departure_date": "2026-09-14",
+    "return_date": "2026-09-21",
+    "target_price_usd": 99999
+  },
+  {
+    "label": "TEST - Denver flexible dates (should always alert)",
+    "owner": "yonas",
+    "mode": "flexible",
+    "ntfy_topic": "yonas-flightsx1064",
+    "origin": "PHL",
+    "destination": "DEN",
+    "target_price_usd": 99999
   }
 ]
