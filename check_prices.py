@@ -15,6 +15,11 @@ Two trip modes are supported (set via the "mode" field in trips.json):
                Uses SerpApi's google_travel_explore engine.
                Example: "Guatemala City sometime in January, $400 or less"
 
+Environment variables required:
+  SERPAPI_KEY   - your SerpApi API key
+
+Run manually:
+  SERPAPI_KEY=xxxx python check_prices.py
 """
 
 import json
@@ -76,16 +81,24 @@ def get_price_specific(trip):
 
 def get_price_flexible(trip):
     """
-    Whole-month search, any dates within it. Uses the google_travel_explore
-    engine with a specific arrival_id (e.g. an airport code), which returns
-    flight price info for that exact destination within the given month.
+    Flexible dates to a specific destination. Uses the google_travel_explore
+    engine with both departure_id and arrival_id set.
+
+    Important: when arrival_id is a specific airport, SerpApi returns a
+    "flights" array (same shape as the google_flights engine) for the
+    *current best upcoming week-long window* - it does NOT support a
+    "month" parameter combined with a specific arrival_id (that combo
+    returns an error, since month-based scanning only applies to the
+    open-ended "destinations" discovery mode with no arrival_id set).
+
+    So for a specific destination, this gives you "what's the cheapest
+    trip there right now" rather than a literal scan of one named month.
     Returns the cheapest price found, or None.
     """
     data = call_serpapi({
         "engine": "google_travel_explore",
         "departure_id": trip["origin"],
         "arrival_id": trip["destination"],
-        "month": trip["month"],       # 1-12
         "currency": "USD",
     })
 
@@ -94,16 +107,10 @@ def get_price_flexible(trip):
         return None
 
     candidates = []
-    for dest in data.get("destinations", []):
-        price = dest.get("flight_price")
+    for flight in data.get("flights", []):
+        price = flight.get("price")
         if isinstance(price, (int, float)):
             candidates.append(price)
-        # Some responses nest price info inside a "flight" object instead.
-        flight = dest.get("flight")
-        if isinstance(flight, dict):
-            price = flight.get("price")
-            if isinstance(price, (int, float)):
-                candidates.append(price)
 
     if not candidates:
         print("  No prices found.")
@@ -140,9 +147,7 @@ def send_ntfy_alert(topic, title, message):
 
 def describe_dates(trip):
     if trip.get("mode") == "flexible":
-        month_names = ["", "January", "February", "March", "April", "May", "June",
-                        "July", "August", "September", "October", "November", "December"]
-        return f"sometime in {month_names[trip['month']]}"
+        return "cheapest upcoming week-long window (flexible dates)"
     return f"depart {trip['departure_date']}, return {trip['return_date']}"
 
 
