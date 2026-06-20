@@ -15,6 +15,11 @@ Two trip modes are supported (set via the "mode" field in trips.json):
                Uses SerpApi's google_travel_explore engine.
                Example: "Guatemala City, whenever it's cheap, $400 or less"
 
+Optional field for either mode:
+
+  "nonstop_only": true   - only consider nonstop (direct) flights.
+                            Omit or set to false to allow any number of stops.
+
 Environment variables required:
   SERPAPI_KEY   - your SerpApi API key
 
@@ -56,7 +61,7 @@ def get_price_specific(trip):
     Exact date pair. Uses the google_flights engine.
     Returns (price, start_date, end_date), or (None, None, None).
     """
-    data = call_serpapi({
+    params = {
         "engine": "google_flights",
         "departure_id": trip["origin"],
         "arrival_id": trip["destination"],
@@ -64,7 +69,11 @@ def get_price_specific(trip):
         "return_date": trip["return_date"],
         "type": "1",  # round trip
         "currency": "USD",
-    })
+    }
+    if trip.get("nonstop_only"):
+        params["stops"] = "1"  # 1 = nonstop only
+
+    data = call_serpapi(params)
 
     if "error" in data:
         print(f"  SerpApi error: {data['error']}")
@@ -105,12 +114,16 @@ def get_price_flexible(trip):
 
     Returns (price, start_date, end_date), or (None, None, None).
     """
-    data = call_serpapi({
+    params = {
         "engine": "google_travel_explore",
         "departure_id": trip["origin"],
         "arrival_id": trip["destination"],
         "currency": "USD",
-    })
+    }
+    if trip.get("nonstop_only"):
+        params["stops"] = "1"  # 1 = nonstop only
+
+    data = call_serpapi(params)
 
     if "error" in data:
         print(f"  SerpApi error: {data['error']}")
