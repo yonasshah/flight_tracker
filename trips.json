@@ -8,7 +8,7 @@
     "destination": "GUA",
     "departure_date": "2027-01-16",
     "return_date": "2027-01-24",
-    "target_price_usd": 800
+    "target_price_usd": 800,
     "stops": "one_stop_max"
   },
   {
