@@ -1,13 +1,12 @@
 [
-  {
-    "label": "Guatemala - specific dates",
-    "owner": "yonas",
-    "mode": "specific",
+    {
+    "label": "Guatemala - flexible, anytime in January",
+    "owner": "Morgan",
+    "mode": "flexible",
     "ntfy_topic": "yonas-flightsx1064",
     "origin": "PHL",
     "destination": "GUA",
-    "departure_date": "2027-01-09",
-    "return_date": "2027-01-18",
+    "month": 1,
     "target_price_usd": 400
   }
 ]
