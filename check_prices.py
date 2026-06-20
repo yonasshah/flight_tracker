@@ -17,8 +17,14 @@ Two trip modes are supported (set via the "mode" field in trips.json):
 
 Optional field for either mode:
 
-  "nonstop_only": true   - only consider nonstop (direct) flights.
-                            Omit or set to false to allow any number of stops.
+  "stops": "nonstop"        - only nonstop (direct) flights.
+  "stops": "one_stop_max"   - nonstop or 1-stop flights.
+  "stops": "two_stop_max"   - nonstop, 1-stop, or 2-stop flights.
+  "stops": "any"            - any number of stops (default if omitted).
+
+  Note: SerpApi only supports "X stops or fewer" tiers - there's no way
+  to filter for an exact stop count (e.g. "exactly 1 stop") or a
+  "more than N stops" search.
 
 Environment variables required:
   SERPAPI_KEY   - your SerpApi API key
@@ -38,10 +44,32 @@ TRIPS_FILE = "trips.json"
 NTFY_BASE_URL = "https://ntfy.sh"
 SERPAPI_BASE_URL = "https://serpapi.com/search.json"
 
+# Maps trips.json's "stops" field to SerpApi's numeric stops codes.
+STOPS_CODES = {
+    "any": "0",            # any number of stops (SerpApi default)
+    "nonstop": "1",        # nonstop only
+    "one_stop_max": "2",   # nonstop or 1 stop
+    "two_stop_max": "3",   # nonstop, 1 stop, or 2 stops
+}
+
 
 def load_trips(path):
     with open(path, "r") as f:
         return json.load(f)
+
+
+def stops_param(trip):
+    """
+    Returns the SerpApi 'stops' value for this trip, or None if the
+    default (any number of stops) should be used and the param can be
+    omitted entirely.
+    """
+    value = trip.get("stops", "any")
+    code = STOPS_CODES.get(value)
+    if code is None:
+        print(f"  Unknown 'stops' value '{value}', ignoring (using any number of stops).")
+        return None
+    return code if code != "0" else None
 
 
 def call_serpapi(params):
@@ -70,8 +98,9 @@ def get_price_specific(trip):
         "type": "1",  # round trip
         "currency": "USD",
     }
-    if trip.get("nonstop_only"):
-        params["stops"] = "1"  # 1 = nonstop only
+    stops = stops_param(trip)
+    if stops is not None:
+        params["stops"] = stops
 
     data = call_serpapi(params)
 
@@ -120,8 +149,9 @@ def get_price_flexible(trip):
         "arrival_id": trip["destination"],
         "currency": "USD",
     }
-    if trip.get("nonstop_only"):
-        params["stops"] = "1"  # 1 = nonstop only
+    stops = stops_param(trip)
+    if stops is not None:
+        params["stops"] = stops
 
     data = call_serpapi(params)
 
